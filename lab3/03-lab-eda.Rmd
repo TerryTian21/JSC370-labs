@@ -1,0 +1,240 @@
+---
+title: "Lab 03 - Exploratory Data Analysis"
+date: "January 22, 2025"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+```{r setup, message=FALSE, echo=FALSE, warning=FALSE}
+#install.packages(c("data.table","tidyverse",leaflet", "reticulate", "lubridate"))
+library(data.table)
+library(leaflet)
+library(tidyverse)
+library(lubridate)
+#library(reticulate) #if you want to use Python code chunks
+```
+
+# Learning Goals
+
+- Read in and get familiar with the meteorology dataset  
+- Step through the EDA "checklist" presented in the class slides
+- Practice making exploratory graphs
+
+# Lab Description
+
+We will work with the meteorological data presented in lecture. Recall the dataset consists of weather station readings in the contiguous US. 
+
+**The objective of the lab is to find the weather station with the highest elevation and look at patterns in the time series of its wind speed and temperature.**
+
+# Steps
+
+### 1. Read in the data
+
+First download and then read in with `data.table` function `fread()`
+
+
+```{r, echo=TRUE}
+download.file(
+  "https://raw.githubusercontent.com/JSC370/JSC370-2025/main/data/met/met_all.gz",
+  destfile = "met_all.gz",
+  method   = "curl",
+  timeout  = 60
+  )
+
+met <- data.table::fread("met_all.gz")
+```
+
+### 2. Check the dimensions, headers, footers. How many columns, rows are there?
+
+- Note you may use R or Python
+
+```{r}
+# <place your code here>
+
+dim(met)
+head(met)
+tail(met)
+```
+
+- _Summarize here_
+There are 2377343 observations 30 columns. 
+
+### 3. Take a look at the variables in the dataset. What kind of variables are there?
+
+```{r}
+# <place your code here>
+str(met)
+```
+
+- _Summarize here_
+There are integers, strings and floats in the dataset.
+
+### 4. Take a closer look at the key variables. 
+
+- Are there missing data? If so, make sure they are coded correctly. 
+- Are there any unusual values that look suspicious? Recall the temperature values in the lecture.
+
+
+```{r}
+# <place your code here>
+
+table(met$year)
+table(met$day)
+table(met$hour)
+summary(met$temp)
+summary(met$elev)
+summary(met$wind.sp)
+
+```
+
+- _Summarize here_
+
+The temperatue has a max of 56 and min of -40. This range of values is out of the ordinary for August. There are 60k N/A values for temperature data. Additionally, the max elevation of 9999 is an unlikely to appear in reality and -13 elevation indicates the weather measurements were taken underground or underwater. The range of wind speeds seems reasonable but there are ~80k missing values.Gooogle search shows the max elevation in USA is (6,194 meters) < 9999. Our dataset likely used 9999 as a filler value to represent missing data or an arbitrary condition.
+
+### 5. Check the data against an external data source and make adjustments.
+
+- Check that the range of elevations make sense.
+- Google or ChatGPT is your friend here.
+- Fix any problems that arise in your checks.
+
+```{r}
+# <place your code here>
+met$elev[met$elev == 9999] <- NA
+met$temp[met$temp == -40] <- NA
+summary(met$elev)
+summary(met$temp)
+
+
+```
+
+- _Summarize anything that was removed_
+These results are more reasonable, with a max elev. of 4113 likely to be at the top of the Rocky Mountains. 
+
+
+### 6. Calculate summary statistics
+
+Remember to keep the initial question in mind. We want to pick out the weather station with maximum elevation and examine its wind speed and temperature.
+
+Some ideas: 
+1. select the weather station with maximum elevation; 
+2. look at the correlation between temperature and wind speed; and 
+3. look at the correlation between temperature and wind speed with hour and day of the month.
+
+
+```{r}
+# <place your code here>
+ss_met = met[, c(1:10, 14, 24)]
+met_clean <- na.omit(ss_met)
+met_clean <- met_clean[elev == max(met_clean$elev)]
+
+cor(met_clean$temp, met_clean$wind.sp)
+cor(met_clean$temp, met_clean$hour)
+cor(met_clean$temp, met_clean$day)
+cor(met_clean$wind.sp, met_clean$hour)
+cor(met_clean$wind.sp, met_clean$day)
+
+```
+
+### 7. At what elevation is the highest weather station?
+
+```{r}
+# <place your code here>
+max(met_clean$elev)
+
+```
+
+- _Summarize here_
+It is at 4113 meters.
+
+### 8. Exploratory graphs: Distributions
+
+We should look at the distributions of all of the key variables (elevation, temp, wind speed) to make sure there are no remaining issues with the data.
+
+```{r }
+# <place your code here>
+
+ggplot(ss_met, aes(x = elev)) +
+  geom_histogram(bins=50, fill = "blue", color = "black", alpha = 0.7) +
+  labs(title = "Elevation Distribution", x = "Elevation", y = "Frequency")
+
+
+ggplot(ss_met, aes(x = temp)) +
+  geom_histogram(bins=50, fill = "blue", color = "black", alpha = 0.7) +
+  labs(title = "Temp Distribution", x = "Temp", y = "Frequency")
+
+
+ggplot(ss_met, aes(x = wind.sp)) +
+  geom_histogram(bins=75, fill = "blue", color = "black", alpha = 0.7) +
+  labs(title = "Wind Speed Distribution", x = "Wind Speed", y = "Frequency")
+
+```
+
+One thing we should consider for later analyses is to log transform wind speed and elevation as the are very skewed.
+
+```{r}
+met_transformed <- ss_met
+met_transformed$wind.sp <- log(met_transformed$wind.sp)
+met_transformed$elev <- log(met_transformed$elev)
+na.omit(met_transformed)
+summary(met_transformed)
+
+```
+
+- _Summarize_
+
+### 9. Exploratory graphs: Time Series
+
+Look at the time series of temperature and wind speed at this location. For this we will need to create a date-time variable for the x-axis.
+
+```{r}
+# <place your code here>
+
+# Create a DateTime column
+met_clean$DateTime <- as.POSIXct(
+  paste(met_clean$year, met_clean$month, met_clean$day, met_clean$hour, sep = "-"),
+  format = "%Y-%m-%d-%H"
+)
+
+head(met_clean)
+
+```
+
+With the date-time variable we can plot the time series of temperature and wind speed. Summarize any trends that you see in these time series plots.
+
+```{r}
+# <place your code here>
+
+ggplot(met_clean, aes(x = DateTime, y = temp)) +
+  geom_line(color = "blue", size = 1) +
+  geom_point(color = "blue", size = 2) +
+  labs(title = "Temperature Over Time", x = "Date-Time", y = "Temperature (°C)") +
+  theme_minimal()
+
+ggplot(met_clean, aes(x = DateTime, y = wind.sp)) +
+  geom_line(color = "blue", size = 1) +
+  geom_point(color = "blue", size = 2) +
+  labs(title = "Wind Speed Over Time", x = "Date-Time", y = "Wind Speed Km/Hr") +
+  theme_minimal()
+
+```
+
+
+- _Summarize_
+
+### 10. Exploratory graphs: Map
+
+Where is the weather station with highest elevation located? (i.e. make a map!)
+
+```{r}
+# <place your code here>
+# hint: make use of leaflet
+
+met_stations <- (unique(met_clean[,c("lat", "lon")]))
+
+leaflet(met_stations) %>%
+    addProviderTiles('CartoDB.Positron') %>%
+    addCircles(lat = ~lat, lng = ~lon, opacity = 1, fillOpacity = 1, radius = 100)
+
+```

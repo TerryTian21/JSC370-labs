@@ -1,0 +1,212 @@
+---
+title: "Lab_5"
+author: "Terry Tian"
+date: "2025-02-05"
+output: html_document
+---
+
+```{r}
+
+library(data.table)
+library(tidyverse)
+library(leaflet)
+library(reticulate)
+
+```
+
+
+
+```{r}
+
+# Download the data
+stations <- fread("ftp://ftp.ncdc.noaa.gov/pub/data/noaa/isd-history.csv")
+stations[, USAF := as.integer(USAF)]
+
+# Dealing with NAs and 999999
+stations[, USAF   := fifelse(USAF == 999999, NA_integer_, USAF)]
+stations[, CTRY   := fifelse(CTRY == "", NA_character_, CTRY)]
+stations[, STATE  := fifelse(STATE == "", NA_character_, STATE)]
+
+# Selecting the three relevant columns, and keeping unique records
+stations <- unique(stations[, list(USAF, CTRY, STATE)])
+
+# Dropping NAs
+stations <- stations[!is.na(USAF)]
+
+# Removing duplicates
+stations[, n := 1:.N, by = .(USAF)]
+stations <- stations[n == 1,][, n := NULL]
+
+# Read in the met data
+download.file(
+  "https://raw.githubusercontent.com/JSC370/JSC370-2025/main/data/met/met_all.gz",
+  destfile = "met_all.gz",
+  method   = "curl",
+  timeout  = 60
+  )
+
+met <- data.table::fread("met_all.gz")
+
+```
+
+Merge the Data
+```{r}
+
+# Using tidyverse package
+met <- left_join(
+  x = met,
+  y = stations,
+  by = c( "USAFID" = "USAF")
+)
+
+
+# Or using merge
+met <- merge(
+  x=met,
+  y=stations,
+  all.x = TRUE,
+  all.y = FALSE,
+  by.x = "USAFID",
+  by.y = "USAF"
+)
+
+head(met)
+```
+
+
+Find stations with media value of temp, wind speed and pressure
+
+
+```{r}
+
+medians <- met[, .(
+  temp_50 = quantile(temp, probs = 0.5, na.rm=TRUE),
+  wind_sp_50 = quantile(wind.sp, probs = 0.5, na.rm=TRUE),
+  pressure_50 = quantile(atm.press, probs = 0.5, na.rm=TRUE)
+)]
+
+medians
+
+```
+
+Group by USAFID and State
+```{r}
+
+station_med <- met[, .(
+  temp = quantile(temp, probs = 0.5, na.rm=TRUE),
+  wind.sp = quantile(wind.sp, probs = 0.5, na.rm=TRUE),
+  atm.press = quantile(atm.press, probs = 0.5, na.rm=TRUE),
+  lat = mean(lat, na.rm=TRUE),
+  lon = mean(lon, na.rm=TRUE)
+), by = .(USAFID, STATE)]
+
+
+head(station_med)
+
+```
+
+
+Identify which state is closest to midpoint. 
+
+```{r}
+
+# Median temp stations
+station_med[, temp_dist := abs(temp - medians$temp_50)]
+median_temp_station <- station_med[temp_dist == 0]
+median_temp_station
+
+# Wind Speed
+station_med[, wind.sp_dist := abs(wind.sp - medians$wind_sp_50)]
+median_wind_station <- station_med[wind.sp_dist == 0]
+median_wind_station
+
+# Atm Pressure
+station_med[, pressure_dist := abs(atm.press - medians$pressure_50)]
+median_pressure_station <- station_med[pressure_dist == 0]
+median_pressure_station
+
+```
+
+
+
+Question 2
+
+
+```{r}
+
+station_med[, temp_50 := quantile(temp, probs=0.5, na.rm=TRUE), by=STATE]
+station_med[, wind.sp_50 := quantile(wind.sp, probs=0.5, na.rm=TRUE),  by=STATE]
+
+# Get the euclidean distance
+station_med[, eudist := sqrt(
+  (temp - temp_50)^2 + (wind.sp - wind.sp_50)^2
+)]
+
+# Choose the most representative, the median, station per state with the lowest euclidean distance
+id_station <- station_med[, .SD[which.min(eudist)], by=STATE]
+
+id_station <- merge(
+  x = id_station,
+  y = stations,
+  by.x = "USAFID", 
+  by.y = "USAF",
+  all.x = TRUE,
+  all.y = FALSE
+)
+
+id_station
+
+```
+
+
+Question 3
+
+```{r}
+
+# Get mid point of state
+
+midpoint <- met[, .(
+  lon_50 = quantile(lon, probs = 0.5, na.rm=TRUE),
+  lat_50 = quantile(lat, probs = 0.5, na.rm=TRUE)
+), by = STATE]
+
+
+mid <- merge(
+  x = met,
+  y = midpoint,
+  by = "STATE"
+)
+
+# Calculate euclidean dist for lon and lat
+mid[, mid_euclid := sqrt(
+  (lon - lon_50)^2 + (lat - lat_50)^2
+)]
+
+# Find closest station to mid-point
+closest <- mid[, .SD[which.min(mid_euclid)], by = STATE]
+
+
+```
+
+Visualzie
+```{r}
+
+leaflet() %>% 
+  addProviderTiles('CartoDB.Positron') %>%
+  addCircles(
+    data = closest,
+    lat = ~lat, lng = ~lon, popup = "geographic mid station",
+    opacity = 1, fillOpacity = 1, radius = 400, color = 'blue'
+  )%>% 
+  addCircles(
+    data = id_station,
+    lat = ~lat, lng = ~lon, popup = "eudist mid station",
+    opacity = 1, fillOpacity = 1, radius = 400, color = 'purple'
+  )
+
+```
+
+
+Question 4
+
+
