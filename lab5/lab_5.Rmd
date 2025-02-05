@@ -5,18 +5,24 @@ date: "2025-02-05"
 output: html_document
 ---
 
-```{r}
+```{r include=FALSE}
+# install.packages("kableExtra")
 
 library(data.table)
 library(tidyverse)
 library(leaflet)
 library(reticulate)
+library(kableExtra)
+library(dplyr)
+library(dtplyr)
+library(mgcv)
 
 ```
 
 
+Download MET and Stations Datsets
 
-```{r}
+```{r message = FALSE}
 
 # Download the data
 stations <- fread("ftp://ftp.ncdc.noaa.gov/pub/data/noaa/isd-history.csv")
@@ -50,7 +56,7 @@ met <- data.table::fread("met_all.gz")
 ```
 
 Merge the Data
-```{r}
+```{r message=FALSE}
 
 # Using tidyverse package
 met <- left_join(
@@ -61,20 +67,18 @@ met <- left_join(
 
 
 # Or using merge
-met <- merge(
-  x=met,
-  y=stations,
-  all.x = TRUE,
-  all.y = FALSE,
-  by.x = "USAFID",
-  by.y = "USAF"
-)
-
-head(met)
+# met <- merge(
+#   x=met,
+#   y=stations,
+#   all.x = TRUE,
+#   all.y = FALSE,
+#   by.x = "USAFID",
+#   by.y = "USAF"
+# )
 ```
 
 
-Find stations with media value of temp, wind speed and pressure
+## Question 1 - Find stations with media value of temp, wind speed and pressure
 
 
 ```{r}
@@ -90,7 +94,8 @@ medians
 ```
 
 Group by USAFID and State
-```{r}
+
+```{r message = FALSE, output=FALSE}
 
 station_med <- met[, .(
   temp = quantile(temp, probs = 0.5, na.rm=TRUE),
@@ -105,10 +110,8 @@ head(station_med)
 
 ```
 
-
-Identify which state is closest to midpoint. 
-
-```{r}
+Compute absolute distance from median and find station equal to median
+```{r message = FALSE, results = 'hide'}
 
 # Median temp stations
 station_med[, temp_dist := abs(temp - medians$temp_50)]
@@ -127,12 +130,9 @@ median_pressure_station
 
 ```
 
+## Quetion 2 -Compute closest by Euclidean distance
 
-
-Question 2
-
-
-```{r}
+```{r results = 'hide'}
 
 station_med[, temp_50 := quantile(temp, probs=0.5, na.rm=TRUE), by=STATE]
 station_med[, wind.sp_50 := quantile(wind.sp, probs=0.5, na.rm=TRUE),  by=STATE]
@@ -159,9 +159,8 @@ id_station
 ```
 
 
-Question 3
-
-```{r}
+## Question 3 - Get closest station to midpoint
+```{r results = 'hide'}
 
 # Get mid point of state
 
@@ -188,8 +187,8 @@ closest <- mid[, .SD[which.min(mid_euclid)], by = STATE]
 
 ```
 
-Visualzie
-```{r}
+Visualize Center and Closest Station
+```{r echo=FALSE}
 
 leaflet() %>% 
   addProviderTiles('CartoDB.Positron') %>%
@@ -207,6 +206,67 @@ leaflet() %>%
 ```
 
 
-Question 4
+## Question 4 - Generate summary table
+
+Start by computing the states’ average temperature. Use that measurement to classify them according to the following criteria:
+
+```{r }
+
+met <- met %>% mutate(
+  avg_temp_lvl = cut(temp,
+                        breaks = c(-Inf, 10, 20, Inf),
+                        labels = c("low", "med", "high"),
+                        right = FALSE))
+
+# Create summary table
+summary <- met %>% 
+  group_by(avg_temp_lvl) %>% 
+  summarise(
+    n_states = n_distinct(STATE),
+    avg_temp = mean(temp, na.rm=T),
+    avg_wind.sp = mean(wind.sp, na.rm=T),
+    avg_pressure = mean(atm.press, na.rm=T)
+  )
+
+
+kable(summary, booktabs = TRUE) %>% 
+  kable_styling(font_size = 10) %>% 
+  kable_paper("hover", full_width = F)
+
+```
+
+## Question 5 - Advanced Regression
+
+
+```{r }
+
+station_med_lt <- lazy_dt(station_med)
+station_med_lt <- station_med_lt |> filter(between(atm.press, 1000, 1020)) |> collect()
+
+
+ggplot(station_med_lt, aes(x=atm.press, y=temp)) +
+  geom_point() +
+  geom_smooth(method="lm", col="cyan") +
+  geom_smooth(method="gam", col="blue")
+
+```
+
+```{r }
+
+lm_mod <- lm(temp ~ atm.press, data=station_med_lt)
+summary(lm_mod)
+
+```
+
+GAM
+```{r}
+
+gam_mod <- gam(temp ~ s(atm.press, bs="cr", k=20), data=station_med_lt)
+summary(gam_mod)
+plot(gam_mod)
+
+
+```
+
 
 
