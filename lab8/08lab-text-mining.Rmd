@@ -33,7 +33,7 @@ You should load in `tidyverse`, (or `data.table`), `tidytext`, `wordcloud2`, `tm
 
 Loading in reference transcription samples from https://www.mtsamples.com/
 
-```{r eval=FALSE}
+```{r eval=TRUE, message=FALSE, echo=FALSE}
 # install.packages("tidytext")
 # install.packages("wordcloud2")
 # install.packages("tm")
@@ -45,6 +45,7 @@ library(tm)
 library(topicmodels)
 library(tokenizers)
 library(stringr)
+library(dplyr)
 library(ggplot2)
 
 mt_samples <- read_csv("https://raw.githubusercontent.com/JSC370/JSC370-2025/main/data/medical_transcriptions/mtsamples.csv")
@@ -96,7 +97,8 @@ top20 <- tokens |> head(20)
 top20 |>
   ggplot(aes(fct_reorder(word, word_frequency), word_frequency)) +
   geom_bar(stat="identity") +
-  theme_bw()
+  theme_bw() + 
+  coord_flip()
 
 top20 |>
   count(word, sort=TRUE) |>
@@ -118,9 +120,9 @@ From this result, the most common words are stopwords i.e. "the", "and", "was" .
 ### What do we see when you remove stopwords and then when you filter further? Does it give us a better idea of what the text is about?
 
 ```{r eval=TRUE, message=FALSE, echo=FALSE}
-head(stopwords("english"))
-length(stopwords("english"))
-head(stop_words)
+# head(stopwords("english"))
+# length(stopwords("english"))
+# head(stop_words)
 
 tokens <- mt_samples |>
   select(transcription) |>
@@ -133,24 +135,24 @@ tokens <- mt_samples |>
   summarise(word_frequency = n()) |>
   arrange(across(word_frequency, desc))
 
-top20 <- tokens |> head(20)
-top20 |>
-  ggplot(aes(fct_reorder(word, word_frequency), word_frequency)) +
-  geom_bar(stat="identity") +
-  theme_bw()
+top20_nostop <- tokens |> head(20)
 
-top20 |>
+top20_nostop |>
+  ggplot(aes(fct_reorder(word, word_frequency), word_frequency)) +
+  geom_col() +
+  theme_bw() + 
+  coord_flip()
+
+top20_nostop |>
   count(word, sort=TRUE) |>
   wordcloud2(size=0.5, color="random-light", background="grey")
 
-
 ```
+
 
 Instead of prepositions, we see nouns, and verbs. For example, blood, skin, incision, provide better context of what topics the text is referring to.
 
 ---
-
-
 
 ## Question 4: ngrams
 
@@ -200,7 +202,7 @@ Note: tutorial said to not compute tri-grams. In the bi-grams, the frequency cou
 ## Question 5: Examining words
 
 
-Using the results from the bigram, pick a word and count the words that appear before and after it, and create a plot of the top 20.
+Using the results from the bigram, pick a word and count the words that appear before and after it, and create a plot of the top 20. 
 
 ```{r eval=TRUE, message=FALSE, echo=FALSE}
 library(stringr)
@@ -222,7 +224,7 @@ diagnosis %>%
                   
 
 ```
-
+Word of choice: diagnosis.
 
 ---
 
