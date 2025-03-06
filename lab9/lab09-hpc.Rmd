@@ -44,7 +44,7 @@ The following functions can be written to be more efficient without using
 
 1. This function generates a `n x k` dataset with all its entries having a Poisson distribution with mean `lambda`.
 
-```{r p2-fun1, include = FALSE}
+```{r p2-fun1, echo = T, results = 'hide'}
 
 # For loop with rbind is inefficient (repeated reallocates memory as matrix grows)
 fun1 <- function(n = 100, k = 4, lambda = 4) {
@@ -75,7 +75,7 @@ On average, `func1alt` is ~100 micro seconds faster than `func1`.
 
 2.  Find the column max (hint: Checkout the function `max.col()`).
 
-```{r p2-fun2, include = FALSE}
+```{r p2-fun2, echo = T, results = 'hide'}
 # Data Generating Process (10 x 10,000 matrix)
 set.seed(1234)
 x <- matrix(rnorm(1e4), nrow=10)
@@ -131,7 +131,7 @@ observations from our original dataset, which reflects the population.
 
 This function implements the non-parametric bootstrap:
 
-```{r p3-boot-fun, include = FALSE}
+```{r p3-boot-fun, echo = T, results = 'hide'}
 my_boot <- function(dat, stat, R, ncpus = 1L) {
   
   # Getting the random indices
@@ -174,7 +174,7 @@ my_boot <- function(dat, stat, R, ncpus = 1L) {
 
 1. Use the previous pseudocode, and make it work with `parallel`. Here is just an example for you to try:
 
-```{r p3-test-boot, echo = FALSE}
+```{r p3-test-boot, echo = T, results = 'hide'}
 # Bootstrap of a linear regression model
 my_stat <- function(d) {coef(lm(y ~ x, data = d))} 
 
